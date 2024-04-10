@@ -1,16 +1,16 @@
-import { Session } from "@supabase/supabase-js";
 import { Outlet, createRootRouteWithContext } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
+import { AuthContextType } from "../contexts/AuthContext";
 
-type AuthContext = {
-  session: Session | null;
-};
+export const Route = createRootRouteWithContext<AuthContextType>()({
+  component: () => <Root />,
+});
 
-export const Route = createRootRouteWithContext<AuthContext>()({
-  component: () => (
+const Root = () => {
+  return (
     <>
       <Outlet />
       <TanStackRouterDevtools />
     </>
-  ),
-});
+  );
+};

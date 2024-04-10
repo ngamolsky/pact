@@ -1,7 +1,11 @@
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
-import { supabase } from "../config/supabase";
-import { router } from "../config/router";
-import { useContext, useEffect } from "react";
+import {
+  Navigate,
+  Outlet,
+  createFileRoute,
+  redirect,
+  useRouterState,
+} from "@tanstack/react-router";
+import { useContext } from "react";
 import { AuthContext } from "../contexts/AuthContext";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -15,29 +19,30 @@ export const Route = createFileRoute("/_authenticated")({
       });
     }
   },
+
   component: () => <AuthComponent />,
 });
 
 const AuthComponent = () => {
-  const session = useContext(AuthContext);
+  const { logout, session } = useContext(AuthContext);
 
-  useEffect(() => {
-    if (!session) {
-      const currentPath = router.parseLocation().pathname;
-      router.navigate({
-        to: "/login",
-        search: {
-          next: currentPath,
-        },
-      });
-    }
-  }, [session]);
+  const routerState = useRouterState();
+  const currentPath = routerState.location.pathname;
+
+  if (!session) {
+    return (
+      <Navigate
+        to="/login"
+        search={currentPath !== "/" ? { next: currentPath } : undefined}
+      />
+    );
+  }
 
   return (
     <div>
       <button
         onClick={() => {
-          supabase.auth.signOut();
+          logout();
         }}
       >
         Log Out

@@ -1,18 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { supabase } from "../config/supabase";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { FC, useContext, useEffect, useState } from "react";
-import { router } from "../config/router";
 import { AuthContext } from "../contexts/AuthContext";
 
 export const Route = createFileRoute("/login")({
   component: () => <Login />,
   validateSearch: (search: { next?: string }) => {
-    if (!search.next) {
-      return {
-        next: "/createAccount",
-      };
-    }
-
     return {
       next: search.next,
     };
@@ -23,22 +15,21 @@ const Login: FC = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [error, setError] = useState("");
-  const session = useContext(AuthContext);
+  const { session, signInByPhone, verifyOtp } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const next = Route.useSearch().next;
 
   useEffect(() => {
     if (session) {
-      router.history.push("/createAccount");
+      navigate({
+        to: next || "/",
+      });
     }
-  }, [session]);
+  }, [navigate, next, session]);
 
   const handlePhoneSignUp = async () => {
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: phoneNumber,
-      });
-      if (error) {
-        throw error;
-      }
+      await signInByPhone(phoneNumber);
     } catch (error) {
       const { message } = error as Error;
       setError(message);
@@ -47,15 +38,7 @@ const Login: FC = () => {
 
   const handleVerification = async () => {
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: phoneNumber,
-        token: verificationCode,
-        type: "sms",
-      });
-
-      if (error) {
-        throw error;
-      }
+      await verifyOtp(phoneNumber, verificationCode);
     } catch (error) {
       const { message } = error as Error;
       setError(message);
