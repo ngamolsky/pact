@@ -8,9 +8,9 @@ export const Route = createRootRouteWithContext<AuthContextType>()({
 
 const Root = () => {
   return (
-    <>
+    <div className="min-h-screen flex flex-col gap-4 items-center justify-center w-full bg-gradient-blue">
       <Outlet />
       <TanStackRouterDevtools />
-    </>
+    </div>
   );
 };

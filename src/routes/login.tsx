@@ -1,10 +1,18 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FC, useContext, useState } from "react";
+import { FC, ReactNode, useContext, useState } from "react";
 import { AuthContext } from "../contexts/AuthContext";
-import { Form, Formik, Field, ErrorMessage, FormikErrors } from "formik";
+import {
+  Form,
+  Formik,
+  Field,
+  ErrorMessage,
+  FormikErrors,
+  FieldProps,
+} from "formik";
 import * as Yup from "yup";
 import { AuthApiError } from "@supabase/supabase-js";
 import { updateProfile } from "../services/profiles";
+import { NumericFormat } from "react-number-format";
 
 export const Route = createFileRoute("/login")({
   component: () => <Login />,
@@ -23,40 +31,47 @@ interface FormValues {
   income: number;
 }
 
-const STEP_TO_FIELD_MAP: {
-  [key: number]: {
-    field: keyof FormValues;
-    placeholder: string;
-  };
-} = {
-  1: {
+const STEP_CONFIG: {
+  field: keyof FormValues;
+  title: string;
+  placeholder: string | ((type: "monthly" | "annual") => string);
+}[] = [
+  {
     field: "phoneNumber",
+    title: "Phone",
     placeholder: "+1234567890",
   },
-  2: {
+  {
     field: "verificationCode",
+    title: "Verification Code",
     placeholder: "123456",
   },
-  3: {
+  {
     field: "name",
+    title: "Name",
     placeholder: "John Doe",
   },
-  4: {
+  {
     field: "income",
-    placeholder: "100,000",
+    title: "Income",
+    placeholder: (type) => (type === "monthly" ? "$10,000" : "$100,000"),
   },
-};
+];
 
 const Login: FC = () => {
   const { signInByPhone, verifyOtp, session, userProfile, setUserProfile } =
     useContext(AuthContext);
 
+  console.log(userProfile?.annualized_income);
+
   const { next } = Route.useSearch();
 
   const [step, setStep] = useState(session ? 3 : 1);
+  const [incomeType, setIncomeType] = useState<"monthly" | "annual">("annual");
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+  const currentStepConfig = STEP_CONFIG[step - 1];
 
   const handleSubmit = async (
     values: FormValues,
@@ -66,21 +81,15 @@ const Login: FC = () => {
 
     setLoading(true);
     try {
-      switch (step) {
-        case 1:
-          try {
-            await signInByPhone(values.phoneNumber);
-          } catch (error) {
-            if (error instanceof AuthApiError) {
-              setErrors({ phoneNumber: error.message });
-            }
-          }
+      switch (currentStepConfig.field) {
+        case "phoneNumber":
+          await signInByPhone(values.phoneNumber);
           break;
-        case 2:
+        case "verificationCode":
           await verifyOtp(values.phoneNumber, values.verificationCode);
 
           break;
-        case 3: {
+        case "name": {
           if (!userID) {
             return;
           }
@@ -91,14 +100,17 @@ const Login: FC = () => {
           setUserProfile(result);
           break;
         }
-        case 4:
+        case "income":
           {
             if (!userID || !values.income) {
               return;
             }
 
+            const annualizedIncome =
+              incomeType === "monthly" ? values.income * 12 : values.income;
+
             const result = await updateProfile(userID, {
-              annualized_income: values.income,
+              annualized_income: annualizedIncome,
             });
 
             setUserProfile(result);
@@ -117,21 +129,22 @@ const Login: FC = () => {
         default:
           break;
       }
-    } catch (error) {
-      console.error(error);
-      if (error instanceof AuthApiError) {
-        setErrors({ verificationCode: error.message });
-      }
-    } finally {
-      setLoading(false);
+
       if (step < 4) {
         setStep(step + 1);
       }
+    } catch (error) {
+      console.error(error);
+      if (error instanceof AuthApiError) {
+        setErrors({ [currentStepConfig.field]: error.message });
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col gap-4 items-center justify-center w-full bg-gradient-blue">
+    <>
       <h1 className="font-antic text-white text-5xl">pact</h1>
       <Formik
         initialValues={{
@@ -143,6 +156,7 @@ const Login: FC = () => {
             userProfile && userProfile.annualized_income
               ? userProfile.annualized_income
               : 1000000,
+          incomeType: "annual",
         }}
         validationSchema={validationSchema[step - 1]}
         onSubmit={(values, { setErrors }) => {
@@ -153,18 +167,19 @@ const Login: FC = () => {
         {({ setFieldError }) => (
           <Form>
             <InputCard
-              inputType={step === 1 ? "tel" : "text"}
-              name={STEP_TO_FIELD_MAP[step].field}
-              placeholder={STEP_TO_FIELD_MAP[step].placeholder}
-              step={step}
-              setCurrentStep={setStep}
+              title={currentStepConfig.title}
               loading={loading}
-              setFieldError={setFieldError}
+              onPrev={step > 1 ? () => setStep(step - 1) : undefined}
+              onChange={() => {
+                setFieldError(currentStepConfig.field, undefined);
+              }}
+              isFinal={step === STEP_CONFIG.length}
+              fields={<>{getFieldsForStep(step, incomeType, setIncomeType)}</>}
             />
           </Form>
         )}
       </Formik>
-    </div>
+    </>
   );
 };
 
@@ -173,7 +188,7 @@ const validationSchema = [
     phoneNumber: Yup.string()
       .required("Phone Number is required")
       .matches(
-        /^\+[1-9]\d{1,14}$/,
+        /^\+[1-9]\d{9,14}$/,
         "Phone number must be in the format +1234567890"
       ),
   }),
@@ -186,70 +201,47 @@ const validationSchema = [
     name: Yup.string().required("Name is required"),
   }),
   Yup.object().shape({
-    income: Yup.string().required("Income is required").matches(/^\d+$/, {
-      message: "Income must be a number",
-      excludeEmptyString: true,
-    }),
+    income: Yup.string()
+      .required("Income is required")
+      .matches(
+        /^\$?\s?((\d{1,3})(,\d{3})*(\.\d{2})?|\d+)(\s?\$\s?|\s?€\s?|\s?£\s?)?$/,
+        {
+          message: "Income must be a valid number",
+          excludeEmptyString: true,
+        }
+      ),
   }),
 ];
 
 const InputCard: React.FC<{
-  inputType: "tel" | "text";
-  name: string;
-  placeholder: string;
-  step: number;
-  setCurrentStep: (step: number) => void;
-  setFieldError: (field: string, message: string | undefined) => void;
+  title: string;
+  fields: ReactNode;
+  isFinal: boolean;
+  onPrev?: () => void;
+  onChange: () => void;
   loading?: boolean;
-}> = ({
-  inputType,
-  name,
-  placeholder,
-  setCurrentStep,
-  step,
-  setFieldError,
-  loading,
-}) => {
+}> = ({ title, loading, fields, onPrev, isFinal, onChange }) => {
   return (
-    <div className="mt-4 p-4 bg-white shadow-lg rounded-lg w-96 h-48 flex flex-col justify-between">
-      <h1 className="text-lg font-semibold text-gray-800 mb-2">
-        {name === "phoneNumber"
-          ? "Phone"
-          : name === "verificationCode"
-            ? "Verification Code"
-            : name === "name"
-              ? "Name"
-              : "Income"}
-      </h1>
-      <div className="flex flex-col flex-grow relative">
-        <Field
-          type={inputType}
-          name={name}
-          placeholder={placeholder}
-          className="w-full p-2 border border-gray-300 rounded-lg"
-        />
-        <ErrorMessage
-          name={name}
-          component="div"
-          className="absolute left-0 bottom-0 mt-4 text-xs text-red-500 whitespace-nowrap overflow-x-auto max-w-full"
-        />
-      </div>
-      <div
-        className={`flex justify-between mt-4 ${step > 1 ? "items-center" : "items-end"}`}
-      >
-        {step > 1 && (
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentStep(step - 1);
-              setFieldError(name, undefined);
-            }}
-            className={`py-2 px-4 rounded-lg bg-gradientEnd text-white`}
-          >
-            Previous
-          </button>
-        )}
-        {step >= 1 && (
+    <div className="mt-4 p-4 bg-white shadow-lg rounded-lg w-96  flex flex-col justify-between">
+      <h1 className="text-lg font-semibold text-gray-800 mb-2">{title}</h1>
+      <div className="flex flex-col flex-grow relative justify-between">
+        {fields}
+        <div className={`flex justify-between mt-4`}>
+          <div>
+            {onPrev && (
+              <button
+                type="button"
+                className={`py-2 px-4 rounded-lg bg-gradientEnd text-white`}
+                onClick={() => {
+                  onPrev && onPrev();
+                  onChange();
+                }}
+              >
+                Back
+              </button>
+            )}
+          </div>
+
           <button
             type="submit"
             className={`py-2 px-4 rounded-lg ${
@@ -258,11 +250,117 @@ const InputCard: React.FC<{
                 : "bg-gradientEnd text-white"
             } ml-auto`}
             disabled={loading}
+            onClick={() => {
+              onChange();
+            }}
           >
-            {step === 4 ? "Submit" : "Next"}
+            {isFinal ? "Submit" : "Next"}
           </button>
-        )}
+        </div>
       </div>
     </div>
   );
+};
+
+const getFieldsForStep = (
+  step: number,
+  incomeType: "monthly" | "annual",
+  setIncomeType: (type: "monthly" | "annual") => void
+) => {
+  const currentStepConfig = STEP_CONFIG[step - 1];
+
+  switch (currentStepConfig.field) {
+    case "phoneNumber":
+    case "verificationCode":
+    case "name":
+      return (
+        <div className="flex flex-col flex-grow relative mb-4">
+          <Field
+            type={currentStepConfig.field === "phoneNumber" ? "tel" : "text "}
+            name={currentStepConfig.field}
+            placeholder={currentStepConfig.placeholder}
+            className="w-full p-2 border border-gray-300 rounded-lg outline-gradientEnd "
+          />
+          <ErrorMessage
+            name={currentStepConfig.field}
+            component="div"
+            className="absolute left-0 bottom-0 mt-4 text-xs text-red-500 whitespace-nowrap overflow-x-auto max-w-full"
+          />
+        </div>
+      );
+
+    case "income": {
+      const placeholder =
+        typeof currentStepConfig.placeholder === "function"
+          ? currentStepConfig.placeholder(incomeType)
+          : currentStepConfig.placeholder;
+      return (
+        <div className="flex flex-col flex-grow relative mb-4">
+          <Field name={currentStepConfig.field}>
+            {({ field, form }: FieldProps<FormValues>) => (
+              <>
+                <NumericFormat
+                  placeholder={placeholder}
+                  className="w-full p-2 border border-gray-300 rounded-lg"
+                  thousandSeparator={true}
+                  prefix={"$"}
+                  allowNegative={false}
+                  onValueChange={(values) => {
+                    form.setFieldValue(field.name, values.floatValue);
+                  }}
+                  value={form.values.income}
+                />
+                <Field name="incomeType">
+                  {() => (
+                    <div className="flex items-center mt-2">
+                      <span className="mr-2">Income Type:</span>
+                      <label className="inline-flex items-center mr-2">
+                        <input
+                          type="radio"
+                          name="incomeType"
+                          value="monthly"
+                          checked={incomeType === "monthly"}
+                          onChange={(e) =>
+                            setIncomeType(
+                              e.target.value as "monthly" | "annual"
+                            )
+                          }
+                          className="mr-1 checked:text-gradientEnd focus:outline-gradientEnd checked:border-transparent"
+                        />
+                        <span className="ml-1">Monthly</span>
+                      </label>
+                      <label className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          name="incomeType"
+                          value="annual"
+                          checked={incomeType === "annual"}
+                          onChange={(e) =>
+                            setIncomeType(
+                              e.target.value as "monthly" | "annual"
+                            )
+                          }
+                          className="mr-1 checked:text-gradientEnd focus:outline-gradientEnd checked:border-transparent"
+                        />
+                        <span className="ml-1">Annual</span>
+                      </label>
+                    </div>
+                  )}
+                </Field>
+              </>
+            )}
+          </Field>
+
+          <ErrorMessage
+            name={currentStepConfig.field}
+            component="div"
+            className="text-red-500 text-sm"
+          />
+        </div>
+      );
+    }
+
+    default:
+      return null;
+  }
 };

@@ -30,8 +30,6 @@ const AuthComponent = () => {
   const currentPath = routerState.location.pathname;
 
   if (!session) {
-    console.log("No session, redirecting to login", currentPath);
-
     return (
       <Navigate
         to="/login"
