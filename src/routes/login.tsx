@@ -13,6 +13,8 @@ import * as Yup from "yup";
 import { AuthApiError } from "@supabase/supabase-js";
 import { updateProfile } from "../services/profiles";
 import { NumericFormat } from "react-number-format";
+import { PhoneInput } from "../components/phoneInput";
+import { sanitizePhoneNumber } from "../utils";
 
 export const Route = createFileRoute("/login")({
   component: () => <Login />,
@@ -81,13 +83,18 @@ const Login: FC = () => {
     setLoading(true);
     try {
       switch (currentStepConfig.field) {
-        case "phoneNumber":
-          await signInByPhone(values.phoneNumber);
+        case "phoneNumber": {
+          const sanitizedPhoneNumber = sanitizePhoneNumber(values.phoneNumber);
+          await signInByPhone(sanitizedPhoneNumber);
           break;
-        case "verificationCode":
-          await verifyOtp(values.phoneNumber, values.verificationCode);
+        }
+        case "verificationCode": {
+          const sanitizedPhoneNumber = sanitizePhoneNumber(values.phoneNumber);
+          await verifyOtp(sanitizedPhoneNumber, values.verificationCode);
 
           break;
+        }
+
         case "name": {
           if (!userID || !values.name || !phone) {
             return;
@@ -147,7 +154,7 @@ const Login: FC = () => {
   };
 
   return (
-    <>
+    <div className="flex flex-col gap-4  justify-center items-center h-full w-full">
       <h1 className="font-antic text-white text-5xl">pact</h1>
       <Formik
         initialValues={{
@@ -170,7 +177,7 @@ const Login: FC = () => {
         enableReinitialize
       >
         {({ setFieldError }) => (
-          <Form>
+          <Form className="w-full ">
             <InputCard
               title={currentStepConfig.title}
               loading={loading}
@@ -184,19 +191,12 @@ const Login: FC = () => {
           </Form>
         )}
       </Formik>
-    </>
+    </div>
   );
 };
 
 const validationSchema = [
-  Yup.object().shape({
-    phoneNumber: Yup.string()
-      .required("Phone Number is required")
-      .matches(
-        /^\+[1-9]\d{9,14}$/,
-        "Phone number must be in the format +1234567890"
-      ),
-  }),
+  Yup.object().shape({}), // Phone handles its own validation
   Yup.object().shape({
     verificationCode: Yup.string()
       .required("Verification Code is required")
@@ -227,11 +227,11 @@ const InputCard: React.FC<{
   loading?: boolean;
 }> = ({ title, loading, fields, onPrev, isFinal, onChange }) => {
   return (
-    <div className="mt-4 p-4 bg-white shadow-lg rounded-lg w-96  flex flex-col justify-between">
+    <div className="mt-4 p-4 bg-white shadow-lg rounded-lg w-5/6  max-w-sm mx-auto flex flex-col justify-between">
       <h1 className="text-lg font-semibold text-gray-800 mb-2">{title}</h1>
       <div className="flex flex-col flex-grow relative justify-between">
         {fields}
-        <div className={`flex justify-between mt-4`}>
+        <div className={`flex justify-between `}>
           <div>
             {onPrev && (
               <button
@@ -276,20 +276,21 @@ const getFieldsForStep = (
 
   switch (currentStepConfig.field) {
     case "phoneNumber":
+      return <PhoneInput />;
     case "verificationCode":
     case "name":
       return (
-        <div className="flex flex-col flex-grow relative mb-4">
+        <div className="flex flex-col flex-grow relative mb-2">
           <Field
-            type={currentStepConfig.field === "phoneNumber" ? "tel" : "text "}
+            type={"text"}
             name={currentStepConfig.field}
             placeholder={currentStepConfig.placeholder}
-            className="w-full p-2 border border-gray-300 rounded-lg outline-gradientEnd "
+            className="w-full p-2 border border-gray-300 rounded-lg outline-gradientEnd mb-6"
           />
           <ErrorMessage
             name={currentStepConfig.field}
             component="div"
-            className="absolute left-0 bottom-0 mt-4 text-xs text-red-500 whitespace-nowrap overflow-x-auto max-w-full"
+            className="absolute left-0 bottom-0 text-xs text-red-500 whitespace-nowrap overflow-x-auto max-w-full"
           />
         </div>
       );

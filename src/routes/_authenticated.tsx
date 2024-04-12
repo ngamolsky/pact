@@ -39,15 +39,15 @@ const AuthComponent = () => {
   }
 
   return (
-    <div>
-      <button
-        onClick={() => {
-          logout();
-        }}
-      >
-        Log Out
-      </button>
-      <Outlet />
+    <div className="flex flex-col inset-0">
+      <header className=" text-white p-4 flex justify-end">
+        <button className="text-white" onClick={logout}>
+          Logout
+        </button>
+      </header>
+      <div className="flex-1 overflow-y-auto p-4">
+        <Outlet />
+      </div>
     </div>
   );
 };
