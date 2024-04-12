@@ -1,16 +1,40 @@
 import { useEffect, useState } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "../config/supabase";
+import { Tables } from "../types/supabase";
+import { getProfile } from "../services/profiles";
+import { AuthContextType } from "../contexts/AuthContext";
 
 const SESSION_KEY = "supabase.session";
 
-export const useAuth = () => {
+export const useAuth: () => AuthContextType = () => {
   const localSessionStr = localStorage.getItem(SESSION_KEY);
   const localSession = localSessionStr
     ? JSON.parse(localSessionStr)
     : (null as Session | null);
 
   const [session, setSession] = useState<Session | null>(localSession);
+  const [userProfile, setUserProfile] = useState<Tables<"profiles"> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (session) {
+        const userID = session.user.id;
+        try {
+          const userProfile = await getProfile(userID);
+          setUserProfile(userProfile);
+        } catch (error) {
+          if (error instanceof Error) {
+            console.error("Error fetching profile:", error.message);
+          }
+        }
+      }
+    };
+
+    fetchProfile();
+  }, [session]);
 
   useEffect(() => {
     const {
@@ -55,5 +79,12 @@ export const useAuth = () => {
     }
   };
 
-  return { session, logout, signInByPhone, verifyOtp };
+  return {
+    session,
+    logout,
+    signInByPhone,
+    verifyOtp,
+    userProfile,
+    setUserProfile,
+  };
 };

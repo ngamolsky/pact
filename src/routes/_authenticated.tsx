@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_authenticated")({
       throw redirect({
         to: "/login",
         search: {
-          next: location.pathname,
+          next: location.pathname === "/" ? undefined : location.pathname,
         },
       });
     }
@@ -30,6 +30,8 @@ const AuthComponent = () => {
   const currentPath = routerState.location.pathname;
 
   if (!session) {
+    console.log("No session, redirecting to login", currentPath);
+
     return (
       <Navigate
         to="/login"

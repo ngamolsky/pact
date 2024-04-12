@@ -1,9 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { FC, useContext, useEffect, useState } from "react";
+import { FC, useContext, useState } from "react";
 import { AuthContext } from "../contexts/AuthContext";
+import { Form, Formik, Field, ErrorMessage, FormikErrors } from "formik";
+import * as Yup from "yup";
+import { AuthApiError } from "@supabase/supabase-js";
+import { updateProfile } from "../services/profiles";
 
 export const Route = createFileRoute("/login")({
   component: () => <Login />,
+
   validateSearch: (search: { next?: string }) => {
     return {
       next: search.next,
@@ -11,71 +16,252 @@ export const Route = createFileRoute("/login")({
   },
 });
 
-const Login: FC = () => {
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [verificationCode, setVerificationCode] = useState("");
-  const [error, setError] = useState("");
-  const { session, signInByPhone, verifyOtp } = useContext(AuthContext);
-  const navigate = useNavigate();
-  const next = Route.useSearch().next;
+interface FormValues {
+  phoneNumber: string;
+  verificationCode: string;
+  name: string;
+  income: number;
+}
 
-  useEffect(() => {
-    if (session) {
-      navigate({
-        to: next || "/",
-      });
-    }
-  }, [navigate, next, session]);
-
-  const handlePhoneSignUp = async () => {
-    try {
-      await signInByPhone(phoneNumber);
-    } catch (error) {
-      const { message } = error as Error;
-      setError(message);
-    }
+const STEP_TO_FIELD_MAP: {
+  [key: number]: {
+    field: keyof FormValues;
+    placeholder: string;
   };
+} = {
+  1: {
+    field: "phoneNumber",
+    placeholder: "+1234567890",
+  },
+  2: {
+    field: "verificationCode",
+    placeholder: "123456",
+  },
+  3: {
+    field: "name",
+    placeholder: "John Doe",
+  },
+  4: {
+    field: "income",
+    placeholder: "100,000",
+  },
+};
 
-  const handleVerification = async () => {
+const Login: FC = () => {
+  const { signInByPhone, verifyOtp, session, userProfile, setUserProfile } =
+    useContext(AuthContext);
+
+  const { next } = Route.useSearch();
+
+  const [step, setStep] = useState(session ? 3 : 1);
+  const [loading, setLoading] = useState(false);
+
+  const navigate = useNavigate();
+
+  const handleSubmit = async (
+    values: FormValues,
+    setErrors: (errors: FormikErrors<FormValues>) => void
+  ) => {
+    const userID = session?.user.id;
+
+    setLoading(true);
     try {
-      await verifyOtp(phoneNumber, verificationCode);
+      switch (step) {
+        case 1:
+          try {
+            await signInByPhone(values.phoneNumber);
+          } catch (error) {
+            if (error instanceof AuthApiError) {
+              setErrors({ phoneNumber: error.message });
+            }
+          }
+          break;
+        case 2:
+          await verifyOtp(values.phoneNumber, values.verificationCode);
+
+          break;
+        case 3: {
+          if (!userID) {
+            return;
+          }
+          const result = await updateProfile(userID, {
+            name: values.name,
+          });
+
+          setUserProfile(result);
+          break;
+        }
+        case 4:
+          {
+            if (!userID || !values.income) {
+              return;
+            }
+
+            const result = await updateProfile(userID, {
+              annualized_income: values.income,
+            });
+
+            setUserProfile(result);
+
+            if (next) {
+              navigate({
+                to: next,
+              });
+            } else {
+              navigate({
+                to: "/",
+              });
+            }
+          }
+          break;
+        default:
+          break;
+      }
     } catch (error) {
-      const { message } = error as Error;
-      setError(message);
+      console.error(error);
+      if (error instanceof AuthApiError) {
+        setErrors({ verificationCode: error.message });
+      }
+    } finally {
+      setLoading(false);
+      if (step < 4) {
+        setStep(step + 1);
+      }
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 w-full">
-      <div className="max-w-md  bg-white p-8 rounded shadow-lg mx-auto">
-        <h2 className="text-2xl mb-4">Phone Sign Up</h2>
-        <input
-          type="tel"
-          placeholder="Phone Number"
-          className="w-full border rounded p-2 mb-4"
-          value={phoneNumber}
-          onChange={(e) => setPhoneNumber(e.target.value)}
+    <div className="min-h-screen flex flex-col gap-4 items-center justify-center w-full bg-gradient-blue">
+      <h1 className="font-antic text-white text-5xl">pact</h1>
+      <Formik
+        initialValues={{
+          phoneNumber:
+            session && session.user.phone ? `+${session.user.phone}` : "",
+          verificationCode: "",
+          name: userProfile && userProfile.name ? userProfile.name : "",
+          income:
+            userProfile && userProfile.annualized_income
+              ? userProfile.annualized_income
+              : 1000000,
+        }}
+        validationSchema={validationSchema[step - 1]}
+        onSubmit={(values, { setErrors }) => {
+          handleSubmit(values, setErrors);
+        }}
+        enableReinitialize
+      >
+        {({ setFieldError }) => (
+          <Form>
+            <InputCard
+              inputType={step === 1 ? "tel" : "text"}
+              name={STEP_TO_FIELD_MAP[step].field}
+              placeholder={STEP_TO_FIELD_MAP[step].placeholder}
+              step={step}
+              setCurrentStep={setStep}
+              loading={loading}
+              setFieldError={setFieldError}
+            />
+          </Form>
+        )}
+      </Formik>
+    </div>
+  );
+};
+
+const validationSchema = [
+  Yup.object().shape({
+    phoneNumber: Yup.string()
+      .required("Phone Number is required")
+      .matches(
+        /^\+[1-9]\d{1,14}$/,
+        "Phone number must be in the format +1234567890"
+      ),
+  }),
+  Yup.object().shape({
+    verificationCode: Yup.string()
+      .required("Verification Code is required")
+      .matches(/^\d{6}$/, "Verification Code must be 6 digits"),
+  }),
+  Yup.object().shape({
+    name: Yup.string().required("Name is required"),
+  }),
+  Yup.object().shape({
+    income: Yup.string().required("Income is required").matches(/^\d+$/, {
+      message: "Income must be a number",
+      excludeEmptyString: true,
+    }),
+  }),
+];
+
+const InputCard: React.FC<{
+  inputType: "tel" | "text";
+  name: string;
+  placeholder: string;
+  step: number;
+  setCurrentStep: (step: number) => void;
+  setFieldError: (field: string, message: string | undefined) => void;
+  loading?: boolean;
+}> = ({
+  inputType,
+  name,
+  placeholder,
+  setCurrentStep,
+  step,
+  setFieldError,
+  loading,
+}) => {
+  return (
+    <div className="mt-4 p-4 bg-white shadow-lg rounded-lg w-96 h-48 flex flex-col justify-between">
+      <h1 className="text-lg font-semibold text-gray-800 mb-2">
+        {name === "phoneNumber"
+          ? "Phone"
+          : name === "verificationCode"
+            ? "Verification Code"
+            : name === "name"
+              ? "Name"
+              : "Income"}
+      </h1>
+      <div className="flex flex-col flex-grow relative">
+        <Field
+          type={inputType}
+          name={name}
+          placeholder={placeholder}
+          className="w-full p-2 border border-gray-300 rounded-lg"
         />
-        <button
-          className="bg-blue-500 text-white px-4 py-2 rounded w-full mb-4"
-          onClick={handlePhoneSignUp}
-        >
-          Send Verification Code
-        </button>
-        <input
-          type="text"
-          placeholder="Verification Code"
-          className="w-full border rounded p-2 mb-4"
-          value={verificationCode}
-          onChange={(e) => setVerificationCode(e.target.value)}
+        <ErrorMessage
+          name={name}
+          component="div"
+          className="absolute left-0 bottom-0 mt-4 text-xs text-red-500 whitespace-nowrap overflow-x-auto max-w-full"
         />
-        <button
-          className="bg-blue-500 text-white px-4 py-2 rounded w-full mb-4"
-          onClick={handleVerification}
-        >
-          Verify
-        </button>
-        {error && <p className="text-red-500">{error}</p>}
+      </div>
+      <div
+        className={`flex justify-between mt-4 ${step > 1 ? "items-center" : "items-end"}`}
+      >
+        {step > 1 && (
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentStep(step - 1);
+              setFieldError(name, undefined);
+            }}
+            className={`py-2 px-4 rounded-lg bg-gradientEnd text-white`}
+          >
+            Previous
+          </button>
+        )}
+        {step >= 1 && (
+          <button
+            type="submit"
+            className={`py-2 px-4 rounded-lg ${
+              loading
+                ? "bg-gray-300 text-gray-500"
+                : "bg-gradientEnd text-white"
+            } ml-auto`}
+            disabled={loading}
+          >
+            {step === 4 ? "Submit" : "Next"}
+          </button>
+        )}
       </div>
     </div>
   );

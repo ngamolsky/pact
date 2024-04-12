@@ -2,15 +2,15 @@ import { useContext } from "react";
 import { AuthContext } from "../contexts/AuthContext";
 
 export const useLoggedInUser = () => {
-  const { session } = useContext(AuthContext);
+  const { session, userProfile } = useContext(AuthContext);
 
   if (!session) {
     throw new Error(
-      "useLoggedInUser must be used within an AuthProvider and signed in"
+      "useLoggedInUser must be used within an AuthProvider and signed in",
     );
   }
 
   const { user } = session;
 
-  return user;
+  return { user, userProfile };
 };
