@@ -82,16 +82,19 @@ export type Database = {
           annualized_income: number | null
           id: string
           name: string | null
+          phone: string
         }
         Insert: {
           annualized_income?: number | null
           id: string
           name?: string | null
+          phone: string
         }
         Update: {
           annualized_income?: number | null
           id?: string
           name?: string | null
+          phone?: string
         }
         Relationships: [
           {

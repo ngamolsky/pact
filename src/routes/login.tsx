@@ -62,8 +62,6 @@ const Login: FC = () => {
   const { signInByPhone, verifyOtp, session, userProfile, setUserProfile } =
     useContext(AuthContext);
 
-  console.log(userProfile?.annualized_income);
-
   const { next } = Route.useSearch();
 
   const [step, setStep] = useState(session ? 3 : 1);
@@ -78,6 +76,7 @@ const Login: FC = () => {
     setErrors: (errors: FormikErrors<FormValues>) => void
   ) => {
     const userID = session?.user.id;
+    const phone = session?.user.phone;
 
     setLoading(true);
     try {
@@ -90,11 +89,13 @@ const Login: FC = () => {
 
           break;
         case "name": {
-          if (!userID) {
+          if (!userID || !values.name || !phone) {
             return;
           }
-          const result = await updateProfile(userID, {
+          const result = await updateProfile({
             name: values.name,
+            id: userID,
+            phone: phone,
           });
 
           setUserProfile(result);
@@ -102,15 +103,17 @@ const Login: FC = () => {
         }
         case "income":
           {
-            if (!userID || !values.income) {
+            if (!userID || !values.income || !phone) {
               return;
             }
 
             const annualizedIncome =
               incomeType === "monthly" ? values.income * 12 : values.income;
 
-            const result = await updateProfile(userID, {
+            const result = await updateProfile({
               annualized_income: annualizedIncome,
+              id: userID,
+              phone: phone,
             });
 
             setUserProfile(result);
@@ -155,7 +158,9 @@ const Login: FC = () => {
           income:
             userProfile && userProfile.annualized_income
               ? userProfile.annualized_income
-              : 1000000,
+              : incomeType == "annual"
+                ? 100000
+                : 10000,
           incomeType: "annual",
         }}
         validationSchema={validationSchema[step - 1]}
