@@ -276,7 +276,7 @@ const getFieldsForStep = (
 
   switch (currentStepConfig.field) {
     case "phoneNumber":
-      return <PhoneInput />;
+      return <PhoneInput shouldValidate />;
     case "verificationCode":
     case "name":
       return (

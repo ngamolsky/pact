@@ -1,8 +1,15 @@
-import { ErrorMessage, Field, useFormikContext } from "formik";
-import React, { useState, useEffect } from "react";
+import { forwardRef } from "react";
+import { ErrorMessage, Field } from "formik";
+import { NumberFormatValues, PatternFormat } from "react-number-format";
 
-const validatePhoneNumber = (value: string) => {
-  let error;
+interface PhoneInputProps {
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  shouldValidate: boolean;
+}
+
+const validatePhoneNumber = (value: string | undefined) => {
+  let error: string | undefined;
   if (!value) {
     error = "Phone number is required";
   } else if (
@@ -15,49 +22,39 @@ const validatePhoneNumber = (value: string) => {
   return error;
 };
 
-export const PhoneInput: React.FC<{
-  onValidPhoneNumber?: (phone: string) => void;
-}> = ({ onValidPhoneNumber }) => {
-  const [inputValue, setInputValue] = useState("");
-  const { setFieldValue } = useFormikContext();
-
-  // Custom debounce function
-  const debounce = (func: () => void, delay: number) => {
-    let timer: NodeJS.Timeout;
-    return () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        func();
-      }, delay);
-    };
-  };
-
-  useEffect(() => {
-    const debouncedCheck = debounce(() => {
-      const isValid = validatePhoneNumber(inputValue);
-      if (!isValid && onValidPhoneNumber) {
-        onValidPhoneNumber(inputValue);
-      }
-    }, 500); // Adjust debounce time as needed
-
-    debouncedCheck();
-
-    // Cleanup function to clear the timeout
-    return () => {};
-  }, [inputValue, onValidPhoneNumber]);
-
+export const PhoneInput = forwardRef<
+  HTMLInputElement,
+  PhoneInputProps & JSX.IntrinsicElements["input"]
+>(({ value: externalValue, onChange, shouldValidate }, ref) => {
   return (
     <div className="flex flex-col flex-grow relative mb-2">
       <Field
-        type="tel"
         name="phoneNumber"
+        validate={shouldValidate && validatePhoneNumber}
+        as={PatternFormat}
+        customInput="input"
+        format="1 (###) ###-####"
         placeholder="+1234567890"
-        className="w-full p-2 border border-gray-300 rounded-lg outline-gradientEnd mb-6"
-        validate={validatePhoneNumber}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-          setInputValue(e.target.value);
-          setFieldValue("phoneNumber", e.target.value); // Update formik field value
+        mask="_"
+        allowEmptyFormatting
+        isAllowed={(values: NumberFormatValues) => {
+          const { floatValue } = values;
+          return !floatValue || !isNaN(floatValue);
         }}
+        type="tel"
+        className="w-full p-2 border border-gray-300 rounded-lg outline-gradientEnd mb-6"
+        onValueChange={(val: NumberFormatValues) => {
+          if (onChange) {
+            onChange({
+              target: {
+                name: "phoneNumber",
+                value: val.value,
+              },
+            } as React.ChangeEvent<HTMLInputElement>);
+          }
+        }}
+        getInputRef={ref}
+        value={externalValue} // Handling controlled scenario
       />
       <ErrorMessage
         name="phoneNumber"
@@ -66,4 +63,4 @@ export const PhoneInput: React.FC<{
       />
     </div>
   );
-};
+});

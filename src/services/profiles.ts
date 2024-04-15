@@ -1,5 +1,6 @@
 import { supabase } from "../config/supabase";
 import { Tables } from "../types/supabase";
+import { sanitizePhoneNumber } from "../utils";
 
 export const updateProfile = async (
   value: Partial<Tables<"profiles">> & { id: string; phone: string },
@@ -37,4 +38,16 @@ export const getProfileByPhone = async (phone: string) => {
     throw error;
   }
   return data && data[0];
+};
+
+export const searchProfileByPhonePrefix = async (phonePrefix: string) => {
+  const { data, error } = await supabase.from("profiles").select().ilike(
+    "phone",
+    `${sanitizePhoneNumber(phonePrefix)}%`,
+  );
+
+  if (error) {
+    throw error;
+  }
+  return data;
 };

@@ -39,8 +39,8 @@ const AuthComponent = () => {
   }
 
   return (
-    <div className="flex flex-col inset-0">
-      <header className=" text-white p-4 flex justify-end">
+    <div className="flex flex-col inset-0 h-full">
+      <header className=" text-white p-4 flex justify-end ">
         <button className="text-white" onClick={logout}>
           Logout
         </button>
