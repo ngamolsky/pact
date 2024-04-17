@@ -296,7 +296,7 @@ const Index = () => {
                           <button
                             onClick={() =>
                               handleVenmoRequest(
-                                "request",
+                                "charge",
                                 parseFloat(
                                   profileShares
                                     .find((p) => p.id === profile.id)!
