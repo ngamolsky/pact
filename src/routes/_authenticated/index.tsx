@@ -105,13 +105,13 @@ const Index = () => {
     share: number,
     phoneNumber: string
   ) => {
-    const venmoUrl = `https://venmo.com/?txn=${type}&recipients=${phoneNumber}&amount=${share}&note=${encodeURIComponent(expenseName)}`;
+    const venmoUrl = `https://venmo.com/?txn=${type}&recipients=${phoneNumber}&amount=${share}&note=${expenseName}`;
     window.open(venmoUrl, "_blank", "noopener,noreferrer");
   };
 
   const isButtonDisabled = (profile: Tables<"profiles">) => {
     return (
-      profile.id == currentProfile.id ||
+      profile.id === currentProfile.id ||
       totalExpense === 0 ||
       expenseName.trim() === ""
     );
@@ -271,65 +271,67 @@ const Index = () => {
                 ).toFixed(0)}% equal share`}
               </p>
             </div>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="">
-                  <th className="p-2 text-left">Name</th>
-                  <th className="p-2 text-right">Share</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selected.map((profile) => (
-                  <tr key={profile.id} className="border-b border-gray-200">
-                    <td className="p-2 text-left">{profile.name}</td>
-                    <td className="p-2 text-right">
-                      $
-                      {profileShares
-                        .find((p) => p.id === profile.id)
-                        ?.share.toFixed(2) ?? 0}
-                    </td>
+            <div className="w-full border-collapse">
+              <div className="flex justify-between p-2 border-b border-gray-200">
+                <span className="text-left">Name</span>
+                <span className="text-right">Share</span>
+              </div>
+              {selected.map((profile) => (
+                <Fragment key={profile.id}>
+                  <div className="border-b">
+                    <div className="flex justify-between p-2  border-gray-200">
+                      <span className="text-left">{profile.name}</span>
+                      <span className="text-right">
+                        ${" "}
+                        {profileShares
+                          .find((p) => p.id === profile.id)
+                          ?.share.toFixed(2) ?? 0}
+                      </span>
+                    </div>
                     {profile.id !== currentProfile.id && (
-                      <td className="p-2 text-right">
-                        <button
-                          className={`bg-gradientStart text-white px-4 py-2 rounded-md mr-2 ${isButtonDisabled(profile) ? "opacity-50 cursor-not-allowed" : ""}`}
-                          onClick={() =>
-                            handleVenmoRequest(
-                              "request",
-                              parseFloat(
-                                profileShares
-                                  .find((p) => p.id === profile.id)!
-                                  .share.toFixed(2)
-                              ),
-                              profile.phone
-                            )
-                          }
-                          disabled={isButtonDisabled(profile)}
-                        >
-                          Request
-                        </button>
-                        <button
-                          className={`bg-gradientStart text-white px-4 py-2 rounded-md ${isButtonDisabled(profile) ? "opacity-50 cursor-not-allowed" : ""}`}
-                          onClick={() =>
-                            handleVenmoRequest(
-                              "pay",
-                              parseFloat(
-                                profileShares
-                                  .find((p) => p.id === profile.id)!
-                                  .share.toFixed(2)
-                              ),
-                              profile.phone
-                            )
-                          }
-                          disabled={isButtonDisabled(profile)}
-                        >
-                          Pay
-                        </button>
-                      </td>
+                      <div className="flex justify-between p-2 ">
+                        <div className="flex justify-between w-full">
+                          <button
+                            onClick={() =>
+                              handleVenmoRequest(
+                                "request",
+                                parseFloat(
+                                  profileShares
+                                    .find((p) => p.id === profile.id)!
+                                    .share.toFixed(2)
+                                ),
+                                profile.phone
+                              )
+                            }
+                            disabled={isButtonDisabled(profile)}
+                            className={`bg-gradientStart text-white px-4 py-2 rounded-md mr-2 w-full ${isButtonDisabled(profile) && "opacity-50 cursor-not-allowed"}`}
+                          >
+                            Request
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleVenmoRequest(
+                                "pay",
+                                parseFloat(
+                                  profileShares
+                                    .find((p) => p.id === profile.id)!
+                                    .share.toFixed(2)
+                                ),
+                                profile.phone
+                              )
+                            }
+                            disabled={isButtonDisabled(profile)}
+                            className={`bg-gradientStart text-white px-4 py-2 rounded-md mr-2 w-full ${isButtonDisabled(profile) && "opacity-50 cursor-not-allowed"}`}
+                          >
+                            Pay
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  </div>
+                </Fragment>
+              ))}
+            </div>
           </Form>
         )}
       </Formik>
