@@ -13,3 +13,11 @@ export const sanitizePhoneNumber = (phone: string) => {
 
   return sanitizedPhoneNumber;
 };
+
+export const formatPhoneNumber = (phone: string) => {
+  const cleanedPhone = phone.replace(/^1/, "").replace(
+    /(\d{3})(\d{3})(\d{4})/,
+    "($1) $2-$3",
+  );
+  return cleanedPhone.length === 10 ? `1${cleanedPhone}` : cleanedPhone;
+};

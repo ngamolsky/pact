@@ -3,12 +3,15 @@ import {
   getProfile,
   searchProfileByPhonePrefix,
 } from "../../services/profiles";
-import { Form, Formik, Field } from "formik";
+import { Form, Formik, FormikProps } from "formik";
 import { debounce } from "lodash";
-import { Combobox } from "@headlessui/react";
-import { useEffect, useState } from "react";
+import { Combobox, Transition } from "@headlessui/react";
+import { useEffect, useState, Fragment } from "react";
 import { PhoneInput } from "../../components/phoneInput";
 import { Tables } from "../../types/supabase";
+import { NumericFormat } from "react-number-format";
+import { CheckIcon } from "@heroicons/react/24/solid";
+import { formatPhoneNumber } from "../../utils";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: () => <Index />,
@@ -39,7 +42,8 @@ const debounceFetch = debounce(
 
 const calculateShares = (
   totalExpense: number,
-  profiles: Tables<"profiles">[]
+  profiles: Tables<"profiles">[],
+  shareAllocation: number
 ): ProfileWithShare[] => {
   const totalIncome = profiles.reduce((sum, profile) => {
     return sum + (profile.annualized_income ?? 0);
@@ -47,20 +51,34 @@ const calculateShares = (
 
   return profiles.map((profile) => {
     const income = profile.annualized_income ?? 0;
-    const share = totalIncome > 0 ? (income / totalIncome) * totalExpense : 0;
+    const incomeBasedShare =
+      totalIncome > 0 ? (income / totalIncome) * totalExpense : 0;
+    const equalShare = totalExpense / profiles.length;
+    const share =
+      (1 - shareAllocation) * incomeBasedShare + shareAllocation * equalShare;
+    const sharePercentage = (share / totalExpense) * 100;
     return {
       ...profile,
       share: share,
+      sharePercentage: sharePercentage,
     };
   });
 };
 
 const Index = () => {
-  const [selected, setSelected] = useState<Tables<"profiles">[]>([]);
+  const currentProfile = Route.useLoaderData().profile;
+
+  const [selected, setSelected] = useState<Tables<"profiles">[]>([
+    currentProfile,
+  ]);
   const [query, setQuery] = useState<string>("");
   const [results, setResults] = useState<Tables<"profiles">[]>([]);
-  const [totalExpense, setTotalExpense] = useState<number>(0);
+  const [totalExpenseStr, setTotalExpenseStr] = useState("");
+  const [expenseName, setExpenseName] = useState("");
   const [profileShares, setProfileShares] = useState<ProfileWithShare[]>([]);
+  const [shareAllocation, setShareAllocation] = useState(0);
+
+  const totalExpense = parseFloat(totalExpenseStr) || 0;
 
   useEffect(() => {
     debounceFetch(query, setResults);
@@ -68,50 +86,145 @@ const Index = () => {
 
   useEffect(() => {
     if (selected.length > 0 && totalExpense > 0) {
-      setProfileShares(calculateShares(totalExpense, selected));
+      setProfileShares(
+        calculateShares(totalExpense, selected, shareAllocation)
+      );
     }
-  }, [selected, totalExpense]);
+  }, [selected, shareAllocation, totalExpense]);
+
+  const handleProfileSelect = (profile: Tables<"profiles">) => {
+    if (!selected.some((p) => p.id === profile.id)) {
+      setSelected([...selected, profile]);
+      setQuery("");
+      setResults([]);
+    }
+  };
+
+  const handleVenmoRequest = async (
+    type: "pay" | "request",
+    share: number,
+    phoneNumber: string
+  ) => {
+    const venmoUrl = `https://venmo.com/?txn=${type}&recipients=${phoneNumber}&amount=${share}&note=${encodeURIComponent(expenseName)}`;
+    window.open(venmoUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const isButtonDisabled = (profile: Tables<"profiles">) => {
+    return (
+      profile.id == currentProfile.id ||
+      totalExpense === 0 ||
+      expenseName.trim() === ""
+    );
+  };
 
   return (
-    <div className="flex flex-col inset-0 h-full p-4 bg-white shadow-lg rounded-lg">
+    <div className="flex flex-col inset-0 h-full p-4 bg-white shadow-lg rounded-lg max-w-2xl mx-auto">
       <Formik
-        initialValues={{ phoneNumber: "", totalExpense: "" }}
+        initialValues={{ phoneNumber: "", totalExpense: "", expenseName: "" }}
         onSubmit={() => {}}
       >
-        {() => (
+        {({
+          setFieldValue,
+        }: FormikProps<{
+          phoneNumber: string;
+          totalExpense: string;
+          expenseName: string;
+        }>) => (
           <Form>
             <div className="mb-4">
               <label
                 htmlFor="phoneNumber"
                 className="block text-sm font-medium text-gray-700"
               >
-                Phone Number
+                Recipient Phone
               </label>
               <Combobox<Tables<"profiles">>
                 value={selected}
-                onChange={setSelected}
+                onChange={() => {
+                  setQuery("");
+                  setResults([]);
+                }}
                 multiple
               >
-                <Combobox.Input
-                  as={PhoneInput}
-                  onChange={(e) => setQuery(e.target.value)}
-                  value={query}
-                  shouldValidate={false}
-                />
-                <Combobox.Options>
-                  {results.map((profile) => (
-                    <Combobox.Option key={profile.id} value={profile}>
-                      {({ active }) => (
-                        <div
-                          className={`p-2 ${active ? "bg-blue-500 text-white" : "bg-white"}`}
+                <div className="relative mt-1">
+                  <div className="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-left  focus:outline-none focus-visible:ring-2 focus-visible:ring-white/75 focus-visible:ring-offset-2 focus-visible:ring-offset-teal-300 sm:text-sm">
+                    <Combobox.Input
+                      as={PhoneInput}
+                      className="w-full border-none py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 focus:ring-0"
+                      onChange={(e) => setQuery(e.target.value)}
+                      value={query}
+                      shouldValidate={false}
+                    />
+                  </div>
+                  <Transition
+                    as={Fragment}
+                    leave="transition ease-in duration-100"
+                    leaveFrom="opacity-100"
+                    leaveTo="opacity-0"
+                    afterLeave={() => setQuery("")}
+                  >
+                    <Combobox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm">
+                      {results.map((profile) => (
+                        <Combobox.Option
+                          key={profile.id}
+                          className={({ active }) =>
+                            `relative cursor-default select-none p-2 ${
+                              active
+                                ? "bg-gradientStart text-white"
+                                : "text-gray-900"
+                            }`
+                          }
+                          value={profile}
+                          onClick={() => handleProfileSelect(profile)}
                         >
-                          {profile.phone} - {profile.name}
-                        </div>
-                      )}
-                    </Combobox.Option>
-                  ))}
-                </Combobox.Options>
+                          {({ selected, active }) => (
+                            <>
+                              <span
+                                className={`block truncate ${
+                                  selected ? "font-medium" : "font-normal"
+                                }`}
+                              >
+                                {formatPhoneNumber(profile.phone)} -{" "}
+                                {profile.name}
+                              </span>
+                              {selected ? (
+                                <span
+                                  className={`absolute inset-y-0 left-0 flex items-center pl-3 ${
+                                    active ? "text-white" : "text-teal-600"
+                                  }`}
+                                >
+                                  <CheckIcon
+                                    className="h-5 w-5"
+                                    aria-hidden="true"
+                                  />
+                                </span>
+                              ) : null}
+                            </>
+                          )}
+                        </Combobox.Option>
+                      ))}
+                    </Combobox.Options>
+                  </Transition>
+                </div>
               </Combobox>
+            </div>
+            <div className="mb-4">
+              <label
+                htmlFor="expenseName"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Expense Name
+              </label>
+              <input
+                id="expenseName"
+                type="text"
+                value={expenseName}
+                onChange={(e) => {
+                  setExpenseName(e.target.value);
+                  setFieldValue("expenseName", e.target.value);
+                }}
+                className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+              />
             </div>
             <div className="mb-4">
               <label
@@ -120,21 +233,103 @@ const Index = () => {
               >
                 Total Expense ($)
               </label>
-              <Field
-                name="totalExpense"
-                type="number"
+              <NumericFormat
+                thousandSeparator={true}
+                prefix={"$"}
+                fixedDecimalScale={true}
+                placeholder="$0.00"
+                allowNegative={false}
+                value={totalExpenseStr}
+                onValueChange={(values) => {
+                  const { value } = values;
+                  setTotalExpenseStr(value);
+                  setFieldValue("totalExpense", Number(value) || 0);
+                }}
                 className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setTotalExpense(Number(e.target.value))
-                }
-                value={totalExpense}
               />
             </div>
-            {profileShares.map((profile) => (
-              <div key={profile.id} className="p-2 border-b border-gray-200">
-                {profile.name} - Share: ${profile.share.toFixed(2)}
+            <div className="my-8">
+              <label className="block text-sm font-medium text-gray-700">
+                Share Allocation
+              </label>
+              <div className="flex items-center">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={shareAllocation}
+                  onChange={(e) =>
+                    setShareAllocation(parseFloat(e.target.value))
+                  }
+                  className="w-full mr-4"
+                />
               </div>
-            ))}
+              <p className="text-sm text-gray-500">
+                {`${((1 - shareAllocation) * 100).toFixed(0)}% based on income, ${(
+                  shareAllocation * 100
+                ).toFixed(0)}% equal share`}
+              </p>
+            </div>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="">
+                  <th className="p-2 text-left">Name</th>
+                  <th className="p-2 text-right">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selected.map((profile) => (
+                  <tr key={profile.id} className="border-b border-gray-200">
+                    <td className="p-2 text-left">{profile.name}</td>
+                    <td className="p-2 text-right">
+                      $
+                      {profileShares
+                        .find((p) => p.id === profile.id)
+                        ?.share.toFixed(2) ?? 0}
+                    </td>
+                    {profile.id !== currentProfile.id && (
+                      <td className="p-2 text-right">
+                        <button
+                          className={`bg-gradientStart text-white px-4 py-2 rounded-md mr-2 ${isButtonDisabled(profile) ? "opacity-50 cursor-not-allowed" : ""}`}
+                          onClick={() =>
+                            handleVenmoRequest(
+                              "request",
+                              parseFloat(
+                                profileShares
+                                  .find((p) => p.id === profile.id)!
+                                  .share.toFixed(2)
+                              ),
+                              profile.phone
+                            )
+                          }
+                          disabled={isButtonDisabled(profile)}
+                        >
+                          Request
+                        </button>
+                        <button
+                          className={`bg-gradientStart text-white px-4 py-2 rounded-md ${isButtonDisabled(profile) ? "opacity-50 cursor-not-allowed" : ""}`}
+                          onClick={() =>
+                            handleVenmoRequest(
+                              "pay",
+                              parseFloat(
+                                profileShares
+                                  .find((p) => p.id === profile.id)!
+                                  .share.toFixed(2)
+                              ),
+                              profile.phone
+                            )
+                          }
+                          disabled={isButtonDisabled(profile)}
+                        >
+                          Pay
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </Form>
         )}
       </Formik>

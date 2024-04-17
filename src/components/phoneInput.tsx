@@ -27,22 +27,21 @@ export const PhoneInput = forwardRef<
   PhoneInputProps & JSX.IntrinsicElements["input"]
 >(({ value: externalValue, onChange, shouldValidate }, ref) => {
   return (
-    <div className="flex flex-col flex-grow relative mb-2">
+    <div className="flex flex-col flex-grow relative">
       <Field
         name="phoneNumber"
         validate={shouldValidate && validatePhoneNumber}
         as={PatternFormat}
         customInput="input"
-        format="1 (###) ###-####"
-        placeholder="+1234567890"
+        format="(###) ###-####"
+        placeholder="(___) ___-____"
         mask="_"
-        allowEmptyFormatting
         isAllowed={(values: NumberFormatValues) => {
           const { floatValue } = values;
           return !floatValue || !isNaN(floatValue);
         }}
         type="tel"
-        className="w-full p-2 border border-gray-300 rounded-lg outline-gradientEnd mb-6"
+        className={`w-full p-2 border border-gray-300 rounded-lg outline-gradientEnd ${shouldValidate && "mb-6"}`}
         onValueChange={(val: NumberFormatValues) => {
           if (onChange) {
             onChange({
@@ -56,11 +55,13 @@ export const PhoneInput = forwardRef<
         getInputRef={ref}
         value={externalValue} // Handling controlled scenario
       />
-      <ErrorMessage
-        name="phoneNumber"
-        component="div"
-        className="absolute left-0 bottom-0 text-xs text-red-500 whitespace-nowrap overflow-x-auto max-w-full"
-      />
+      {shouldValidate && (
+        <ErrorMessage
+          name="phoneNumber"
+          component="div"
+          className="absolute left-0 bottom-0 text-xs text-red-500 whitespace-nowrap overflow-x-auto max-w-full"
+        />
+      )}
     </div>
   );
 });
