@@ -101,11 +101,13 @@ const Index = () => {
   };
 
   const handleVenmoRequest = async (
-    type: "pay" | "request",
+    type: "pay" | "charge",
     share: number,
     phoneNumber: string
   ) => {
-    const venmoUrl = `https://venmo.com/?txn=${type}&recipients=${phoneNumber}&amount=${share}&note=${expenseName}`;
+    console.log(encodeURIComponent(expenseName));
+
+    const venmoUrl = `https://venmo.com/?txn=${type}&recipients=${phoneNumber}&amount=${share}&note=${encodeURIComponent(expenseName)}`;
     window.open(venmoUrl, "_blank", "noopener,noreferrer");
   };
 
